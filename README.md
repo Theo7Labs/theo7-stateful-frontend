@@ -15,7 +15,7 @@ The frontend is a single-page HTML interface deployed on **Netlify**, and the ba
 ## 🔗 Live Demo  
 Click below to use the live stateful counter:
 
-👉 **https://YOUR_NETLIFY_URL_HERE**
+👉 **https://theo7-visit-counter.netlify.app/
 
 Each time you click the button, it calls your API Gateway endpoint, which triggers the Lambda and updates DynamoDB in real time.
 
