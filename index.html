@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stateful Serverless Application | AWS Lambda Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        .animate-gradient {
+            background-size: 200% 200%;
+            animation: gradient 15s ease infinite;
+        }
+        
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
+            50% { box-shadow: 0 0 40px rgba(147, 51, 234, 0.8); }
+        }
+        
+        .glow-effect {
+            animation: pulse-glow 3s ease-in-out infinite;
+        }
+
+        .spin {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white p-8">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <div class="text-center mb-12">
+            <h1 class="text-5xl md:text-6xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 animate-gradient">
+                Stateful Serverless Application
+            </h1>
+            <p class="text-xl text-gray-300 mb-2">
+                Solving the Core Challenge: Memory in a Stateless Environment
+            </p>
+            <p class="text-sm text-gray-500">AWS Lambda + DynamoDB + API Gateway</p>
+        </div>
+
+        <!-- Main Counter Card -->
+        <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 mb-8 border border-white/20 shadow-2xl glow-effect">
+            <div class="text-center mb-6">
+                <div class="inline-flex items-center gap-2 bg-blue-500/20 px-4 py-2 rounded-full mb-4">
+                    <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                    <span class="text-sm font-semibold text-blue-300">Live Demo</span>
+                </div>
+                
+                <h2 class="text-3xl font-bold mb-2">Your Visit Count</h2>
+                <p class="text-gray-400 text-sm mb-2">Session ID: <span id="sessionId" class="font-mono">...</span></p>
+            </div>
+
+            <div class="flex flex-col items-center gap-6">
+                <!-- Loading State -->
+                <div id="loadingState" class="hidden items-center gap-3 text-blue-400">
+                    <svg class="w-6 h-6 spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    <span>Fetching from DynamoDB...</span>
+                </div>
+
+                <!-- Error State -->
+                <div id="errorState" class="hidden w-full max-w-2xl">
+                    <div class="bg-red-500/20 border border-red-500/50 rounded-lg p-4 text-red-300">
+                        <div class="flex items-start gap-3">
+                            <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <div>
+                                <p class="font-semibold mb-2">Error: <span id="errorMessage"></span></p>
+                                <p class="text-sm text-red-200">Please check your API configuration</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Success State -->
+                <div id="successState" class="hidden flex-col items-center gap-6">
+                    <div class="text-8xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-400 to-blue-500" id="visitCount">
+                        ?
+                    </div>
+                    <div class="flex items-center gap-2 text-green-400">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span class="text-sm">State persisted in DynamoDB</span>
+                    </div>
+                    
+                    <!-- Response Preview -->
+                    <div class="bg-gray-800/50 rounded-lg p-4 text-left w-full max-w-md">
+                        <p class="text-xs text-gray-400 mb-2">Latest API Response:</p>
+                        <pre class="text-xs text-gray-300 overflow-x-auto" id="responsePreview">...</pre>
+                    </div>
+                </div>
+
+                <button
+                    id="incrementBtn"
+                    class="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed px-8 py-3 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 flex items-center gap-2 shadow-lg"
+                >
+                    <svg id="btnIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    <span>Increment Visit Count</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Architecture Section -->
+        <div class="mb-8">
+            <div class="text-center mb-6">
+                <button 
+                    id="toggleArchitecture" 
+                    class="text-blue-400 hover:text-blue-300 underline text-sm transition-colors"
+                >
+                    Show Technical Architecture
+                </button>
+            </div>
+
+            <div id="architectureSection" class="hidden grid md:grid-cols-3 gap-6">
+                <div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 hover:border-blue-500/50 transition-all">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="bg-blue-500/20 p-3 rounded-lg">
+                            <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold">API Gateway</h3>
+                    </div>
+                    <p class="text-gray-300 text-sm">
+                        RESTful endpoint that routes HTTP requests to the Lambda function with zero server management and automatic scaling.
+                    </p>
+                </div>
+
+                <div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 hover:border-purple-500/50 transition-all">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="bg-purple-500/20 p-3 rounded-lg">
+                            <svg class="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold">AWS Lambda</h3>
+                    </div>
+                    <p class="text-gray-300 text-sm">
+                        Serverless Python 3.11 function that executes the read-modify-write logic using the boto3 SDK for DynamoDB operations.
+                    </p>
+                </div>
+
+                <div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 hover:border-green-500/50 transition-all">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="bg-green-500/20 p-3 rounded-lg">
+                            <svg class="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold">DynamoDB</h3>
+                    </div>
+                    <p class="text-gray-300 text-sm">
+                        NoSQL database providing persistent, external memory with single-digit millisecond latency and automatic scaling.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- The Statefulness Solution -->
+        <div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 mb-8">
+            <h3 class="text-2xl font-bold mb-6 text-center">The Statefulness Solution</h3>
+            <div class="space-y-4 text-gray-300">
+                <div class="flex items-start gap-4 p-4 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                    <span class="text-3xl font-bold text-blue-400">1</span>
+                    <div>
+                        <p class="font-semibold text-white mb-1">Read State</p>
+                        <p class="text-sm">Lambda uses boto3 to retrieve the current visit count from DynamoDB using your unique session_id as the primary key.</p>
+                    </div>
+                </div>
+                <div class="flex items-start gap-4 p-4 bg-purple-500/10 rounded-lg border border-purple-500/20">
+                    <span class="text-3xl font-bold text-purple-400">2</span>
+                    <div>
+                        <p class="font-semibold text-white mb-1">Modify State</p>
+                        <p class="text-sm">The count is incremented by one, with proper Decimal type conversion to avoid JSON serialization bugs.</p>
+                    </div>
+                </div>
+                <div class="flex items-start gap-4 p-4 bg-green-500/10 rounded-lg border border-green-500/20">
+                    <span class="text-3xl font-bold text-green-400">3</span>
+                    <div>
+                        <p class="font-semibold text-white mb-1">Write State</p>
+                        <p class="text-sm">The updated count is persisted back to DynamoDB, maintaining state across serverless invocations.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tech Stack Footer -->
+        <div class="text-center text-sm text-gray-400 space-y-2">
+            <p class="font-semibold">Technology Stack</p>
+            <p>AWS Lambda (Python 3.11) • Amazon DynamoDB • API Gateway • AWS SAM</p>
+            <p class="text-xs">Deployed via Infrastructure as Code • CORS-Enabled • Session-Based State Management</p>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_URL = 'https://y5pqp031pg.execute-api.us-east-1.amazonaws.com/Prod/hello';
+        
+        // Generate session ID
+        const sessionId = Math.random().toString(36).substring(7);
+        document.getElementById('sessionId').textContent = sessionId;
+
+        // State management
+        let isLoading = false;
+
+        // UI Elements
+        const loadingState = document.getElementById('loadingState');
+        const errorState = document.getElementById('errorState');
+        const successState = document.getElementById('successState');
+        const visitCount = document.getElementById('visitCount');
+        const responsePreview = document.getElementById('responsePreview');
+        const errorMessage = document.getElementById('errorMessage');
+        const incrementBtn = document.getElementById('incrementBtn');
+        const btnIcon = document.getElementById('btnIcon');
+
+        // Toggle architecture section
+        document.getElementById('toggleArchitecture').addEventListener('click', function() {
+            const section = document.getElementById('architectureSection');
+            section.classList.toggle('hidden');
+            this.textContent = section.classList.contains('hidden') 
+                ? 'Show Technical Architecture' 
+                : 'Hide Technical Architecture';
+        });
+
+        // Show/hide states
+        function showLoading() {
+            loadingState.classList.remove('hidden');
+            loadingState.classList.add('flex');
+            errorState.classList.add('hidden');
+            successState.classList.add('hidden');
+            btnIcon.classList.add('spin');
+            incrementBtn.disabled = true;
+        }
+
+        function showError(error) {
+            loadingState.classList.add('hidden');
+            errorState.classList.remove('hidden');
+            successState.classList.add('hidden');
+            errorMessage.textContent = error;
+            btnIcon.classList.remove('spin');
+            incrementBtn.disabled = false;
+        }
+
+        function showSuccess(data) {
+            loadingState.classList.add('hidden');
+            errorState.classList.add('hidden');
+            successState.classList.remove('hidden');
+            successState.classList.add('flex');
+            visitCount.textContent = data.visit_count;
+            responsePreview.textContent = JSON.stringify(data, null, 2);
+            btnIcon.classList.remove('spin');
+            incrementBtn.disabled = false;
+        }
+
+        // Fetch visit count
+        async function fetchVisitCount() {
+            if (isLoading) return;
+            isLoading = true;
+            showLoading();
+
+            try {
+                console.log('Calling API:', `${API_URL}?session_id=${sessionId}`);
+                
+                const response = await fetch(`${API_URL}?session_id=${sessionId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('Response data:', data);
+                
+                showSuccess(data);
+            } catch (error) {
+                console.error('Error:', error);
+                showError(error.message);
+            } finally {
+                isLoading = false;
+            }
+        }
+
+        // Button click handler
+        incrementBtn.addEventListener('click', fetchVisitCount);
+
+        // Initial load
+        fetchVisitCount();
+    </script>
+</body>
+</html>
